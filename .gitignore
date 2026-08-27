@@ -1,0 +1,13 @@
+# conda虚拟环境，不要上传
+venv/
+# 数据集
+data/
+# python缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+# 程序生成图片不用上传（你手动保存的compare_result.png要保留，不要写这里）
+# 系统文件
+.DS_Store
+Thumbs.db
