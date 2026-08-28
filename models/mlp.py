@@ -3,7 +3,7 @@ import torch.nn as nn
 class MLP(nn.Module):
     def __init__(self, input_dim = 784, hidden_dims = [256, 256], num_classes = 10):
         super().__init__()
-        
+        self.hidden_dims = hidden_dims
         # build MLP layers
         layers = []
         prev_dim = input_dim
