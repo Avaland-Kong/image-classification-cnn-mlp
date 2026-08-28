@@ -3,15 +3,15 @@ import os
 import torch
 import torch.nn as nn
 from dataset_config import train_loader, test_loader, image_shape, num_classes
-from models import MLP
+from models import MLP, CNN
 from train import train_model
 from test import test_model
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", "-mode", type=str, default="train", choices=["train", "test", "train_test"], help="Mode to run the model")
-    parser.add_argument("--model_name", "-mn", type=str, default="mlp_0", help="The model name")
-    parser.add_argument("--model", "-m", type=str, default="mlp", choices=["mlp"], help="Model to use")
+    parser.add_argument("--model_name", "-mn", type=str, default="model_0", help="The model name")
+    parser.add_argument("--model", "-m", type=str, default="mlp", choices=["mlp", "cnn"], help="Model to use")
     parser.add_argument("--dims", "-d", type=int, nargs="+", default=[256, 256], help="Hidden dimensions for mlp or channels for cnn")
     parser.add_argument("--loss_function", "-lf", type=str, default="cross_entropy", choices=["cross_entropy"], help="Loss function to use")
     parser.add_argument("--optimizer", "-opt", type=str, default="adam", choices=["adam", "sgd"], help="Optimizer to use")
@@ -20,14 +20,24 @@ def parse_args():
     return parser.parse_args()
 
 def build_model(model_type, dims, image_shape, num_classes):
+    model = None
     if model_type == "mlp":
-        return MLP(
-            input_dim = int(torch.prod(torch.tensor(image_shape))), 
+        model = MLP(
+            input_shape = image_shape, 
             hidden_dims = dims,
             num_classes = num_classes
         )
-    else:
+    elif model_type == "cnn":
+        model = CNN(
+            input_shape = image_shape,
+            channels = dims,
+            num_classes = num_classes
+        )
+    if model is None:
         raise ValueError(f"Invalid model type: {model_type}")
+    print("Model:")
+    print(model)
+    return model
 
 def build_loss_function(loss_function_name):
     if loss_function_name == "cross_entropy":
@@ -43,14 +53,14 @@ def build_optimizer(optimizer_name, model, lr):
     else:
         raise ValueError(f"Invalid optimizer name: {optimizer_name}")
 
-def save_model(model, model_name, model_type, dims):
+def save_model(model, model_name, model_type):
     os.makedirs("checkpoints", exist_ok=True)
     path = f"checkpoints/{model_name}.pth"
     torch.save(
         {
             "model_state_dict": model.state_dict(), 
             "model_type": model_type,
-            "model_dims": dims,
+            "model_dims": model.dims,
             "image_shape": image_shape,
             "num_classes": num_classes,
         },
@@ -84,7 +94,7 @@ if __name__ == "__main__":
         model = build_model(args.model, args.dims, image_shape, num_classes)
         optimizer = build_optimizer(args.optimizer, model, args.lr)
         train_model(model, train_loader, loss_function, optimizer, device, epochs)
-        save_model(model, args.model_name, args.model, args.dims)
+        save_model(model, args.model_name, args.model)
     # test the model
     elif args.mode == "test":
         model = load_model(args.model_name)
@@ -94,7 +104,7 @@ if __name__ == "__main__":
         model = build_model(args.model, args.dims, image_shape, num_classes)
         optimizer = build_optimizer(args.optimizer, model, args.lr)
         train_model(model, train_loader, loss_function, optimizer, device, epochs)
-        save_model(model, args.model_name, args.model, args.dims)
+        save_model(model, args.model_name, args.model)
         test_model(model, test_loader, loss_function, device)
     else:
         raise ValueError(f"Invalid mode: {args.mode}")

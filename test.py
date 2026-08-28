@@ -1,3 +1,6 @@
+import torch
+
+@torch.no_grad()
 def test_model(model, test_loader, criterion, device):
     # move model to device
     model.to(device)
