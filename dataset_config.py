@@ -24,6 +24,8 @@ test_dataset = datasets.MNIST(
     download=True, 
     transform=transform
 )
+image_shape = train_dataset[0][0].shape
+num_classes = len(train_dataset.classes)
 
 # define data loader
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
