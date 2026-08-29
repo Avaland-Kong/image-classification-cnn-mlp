@@ -1,10 +1,12 @@
 import argparse
+import csv
+import json
 import random as rd
 import numpy as np
-import os
+from pathlib import Path
 import torch
 import torch.nn as nn
-from dataset_config import train_dataset, test_dataset, image_shape, num_classes, BATCH_SIZE
+from dataset_config import get_datasets, BATCH_SIZE, DATASET_CHOICES
 from models import MLP, CNN
 from train import train_model
 from test import test_model
@@ -24,6 +26,7 @@ def parse_args():
     parser.add_argument("--mode", "-mode", type=str, default="train", choices=["train", "test", "train_test"], help="Mode to run the model")
     parser.add_argument("--model_name", "-mn", type=str, default="model_0", help="The model name")
     parser.add_argument("--model", "-m", type=str, default="mlp", choices=["mlp", "cnn"], help="Model to use")
+    parser.add_argument("--dataset", "-ds", type=str, default="mnist", choices=list(DATASET_CHOICES), help="Dataset to use")
     parser.add_argument("--dims", "-d", type=int, nargs="+", default=[256, 256], help="Hidden dimensions for mlp or channels for cnn")
     parser.add_argument("--loss_function", "-lf", type=str, default="cross_entropy", choices=["cross_entropy"], help="Loss function to use")
     parser.add_argument("--optimizer", "-opt", type=str, default="adam", choices=["adam", "sgd"], help="Optimizer to use")
@@ -66,8 +69,9 @@ def build_optimizer(optimizer_name, model, lr):
     else:
         raise ValueError(f"Invalid optimizer name: {optimizer_name}")
 
-def save_model(model, model_name, model_type):
-    os.makedirs("checkpoints", exist_ok=True)
+def save_model(model, model_name, model_type, image_shape, num_classes):
+    ckpt_dir = Path("checkpoints")
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
     path = f"checkpoints/{model_name}.pth"
     torch.save(
         {
@@ -93,12 +97,52 @@ def load_model(model_name):
     model.load_state_dict(ckpt["model_state_dict"])
     return model
 
+def save_run_logs(model_name, args, history, test_metrics=None):
+    log_dir = Path("logs") / model_name
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    csv_path = log_dir / "history.csv"
+    fieldnames = list(history[0].keys())
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(history)
+
+    config = {
+        "model_name": model_name,
+        "dataset": args.dataset,
+        "model": args.model,
+        "dims": args.dims,
+        "optimizer": args.optimizer,
+        "lr": args.lr,
+        "epochs": args.epochs,
+        "seed": args.seed,
+        "loss_function": args.loss_function,
+        "batch_size": BATCH_SIZE,
+    }
+    with open(log_dir / "config.json", "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+
+    if test_metrics is not None:
+        metrics = {
+            "final_test_loss": test_metrics[0],
+            "final_test_acc": test_metrics[1],
+        }
+        with open(log_dir / "metrics.json", "w", encoding="utf-8") as f:
+            json.dump(metrics, f, indent=2, ensure_ascii=False)
+
+    print(f"Logs saved to {log_dir}")
+
 
 if __name__ == "__main__":
     args = parse_args()
 
     # set seed
     set_seed(args.seed)
+
+    # load dataset
+    train_dataset, test_dataset, image_shape, num_classes = get_datasets(args.dataset)
+    print(f"Dataset: {args.dataset} | image_shape={tuple(image_shape)} | num_classes={num_classes}")
 
     # define data loader
     generator = torch.Generator()
@@ -116,8 +160,11 @@ if __name__ == "__main__":
     if args.mode == "train":
         model = build_model(args.model, args.dims, image_shape, num_classes)
         optimizer = build_optimizer(args.optimizer, model, args.lr)
-        train_model(model, train_loader, loss_function, optimizer, device, epochs)
-        save_model(model, args.model_name, args.model)
+        model, history = train_model(
+            model, train_loader, loss_function, optimizer, device, epochs
+        )
+        save_model(model, args.model_name, args.model, image_shape, num_classes)
+        save_run_logs(args.model_name, args, history)
     # test the model
     elif args.mode == "test":
         model = load_model(args.model_name)
@@ -126,8 +173,11 @@ if __name__ == "__main__":
     elif args.mode == "train_test":
         model = build_model(args.model, args.dims, image_shape, num_classes)
         optimizer = build_optimizer(args.optimizer, model, args.lr)
-        train_model(model, train_loader, loss_function, optimizer, device, epochs)
-        save_model(model, args.model_name, args.model)
-        test_model(model, test_loader, loss_function, device)
+        model, history = train_model(
+            model, train_loader, loss_function, optimizer, device, epochs
+        )
+        save_model(model, args.model_name, args.model, image_shape, num_classes)
+        test_metrics = test_model(model, test_loader, loss_function, device)
+        save_run_logs(args.model_name, args, history, test_metrics)
     else:
         raise ValueError(f"Invalid mode: {args.mode}")

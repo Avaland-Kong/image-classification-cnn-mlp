@@ -7,6 +7,8 @@ def train_model(model, train_loader, criterion, optimizer, device, epochs):
     # set model to train mode
     model.train()
 
+    history = []
+
     # train the model
     for epoch in range(epochs):
         start_time = time.time()
@@ -35,11 +37,20 @@ def train_model(model, train_loader, criterion, optimizer, device, epochs):
             correct += (outputs.argmax(dim=1) == labels).sum().item()
             total += labels.size(0)
 
+        avg_loss = total_loss / total
+        avg_acc = correct / total
+
+        history.append({
+            "epoch": epoch + 1,
+            "train_loss": avg_loss,
+            "train_acc": avg_acc,
+        })
+
         print(
             f"Epoch {epoch+1}/{epochs} | "
-            f"Loss: {total_loss/total:.4f} | "
-            f"Accuracy: {correct/total:.4f} | "
+            f"Loss: {avg_loss:.4f} | "
+            f"Accuracy: {avg_acc:.4f} | "
             f"Time: {time.time() - start_time:.2f}s"
         )
 
-    return model
+    return model, history

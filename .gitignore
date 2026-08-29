@@ -30,5 +30,6 @@ Thumbs.db
 desktop.ini
 
 # 日志与临时文件
+logs/
 *.log
 *.tmp
