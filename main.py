@@ -1,11 +1,23 @@
 import argparse
+import random as rd
+import numpy as np
 import os
 import torch
 import torch.nn as nn
-from dataset_config import train_loader, test_loader, image_shape, num_classes
+from dataset_config import train_dataset, test_dataset, image_shape, num_classes, BATCH_SIZE
 from models import MLP, CNN
 from train import train_model
 from test import test_model
+from torch.utils.data import DataLoader
+
+def set_seed(seed):
+    rd.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -17,6 +29,7 @@ def parse_args():
     parser.add_argument("--optimizer", "-opt", type=str, default="adam", choices=["adam", "sgd"], help="Optimizer to use")
     parser.add_argument("--lr", "-lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--epochs", "-e", type=int, default=10, help="Number of epochs")
+    parser.add_argument("--seed", "-s", type=int, default=42, help="Seed for random number generation")
     return parser.parse_args()
 
 def build_model(model_type, dims, image_shape, num_classes):
@@ -83,6 +96,16 @@ def load_model(model_name):
 
 if __name__ == "__main__":
     args = parse_args()
+
+    # set seed
+    set_seed(args.seed)
+
+    # define data loader
+    generator = torch.Generator()
+    generator.manual_seed(args.seed)
+    train_loader = DataLoader(train_dataset, batch_size = BATCH_SIZE, shuffle = True, generator = generator)
+    test_loader = DataLoader(test_dataset, batch_size = BATCH_SIZE, shuffle = False)
+
     # define device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
