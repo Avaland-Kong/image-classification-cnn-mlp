@@ -7,10 +7,11 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 from dataset_config import get_datasets, BATCH_SIZE, DATASET_CHOICES
+from torch.utils.data import DataLoader
 from models import MLP, CNN
 from train import train_model
 from test import test_model
-from torch.utils.data import DataLoader
+
 
 def set_seed(seed):
     rd.seed(seed)
@@ -33,6 +34,7 @@ def parse_args():
     parser.add_argument("--lr", "-lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--epochs", "-e", type=int, default=10, help="Number of epochs")
     parser.add_argument("--seed", "-s", type=int, default=42, help="Seed for random number generation")
+    parser.add_argument("--val_ratio", "-vr", type=float, default=0.1, help="Fraction of official train set used as validation (default: 0.1)")
     return parser.parse_args()
 
 def build_model(model_type, dims, image_shape, num_classes):
@@ -97,7 +99,7 @@ def load_model(model_name):
     model.load_state_dict(ckpt["model_state_dict"])
     return model
 
-def save_run_logs(model_name, args, history, test_metrics=None):
+def save_run_logs(model_name, args, history, test_metrics=None, split_sizes=None):
     log_dir = Path("logs") / model_name
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -119,7 +121,13 @@ def save_run_logs(model_name, args, history, test_metrics=None):
         "seed": args.seed,
         "loss_function": args.loss_function,
         "batch_size": BATCH_SIZE,
+        "val_ratio": args.val_ratio,
     }
+    if split_sizes is not None:
+        config["n_train"] = split_sizes[0]
+        config["n_val"] = split_sizes[1]
+        config["n_test"] = split_sizes[2]
+
     with open(log_dir / "config.json", "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
 
@@ -128,6 +136,9 @@ def save_run_logs(model_name, args, history, test_metrics=None):
             "final_test_loss": test_metrics[0],
             "final_test_acc": test_metrics[1],
         }
+        if history and "val_acc" in history[-1]:
+            metrics["final_val_loss"] = history[-1]["val_loss"]
+            metrics["final_val_acc"] = history[-1]["val_acc"]
         with open(log_dir / "metrics.json", "w", encoding="utf-8") as f:
             json.dump(metrics, f, indent=2, ensure_ascii=False)
 
@@ -140,15 +151,22 @@ if __name__ == "__main__":
     # set seed
     set_seed(args.seed)
 
-    # load dataset
-    train_dataset, test_dataset, image_shape, num_classes = get_datasets(args.dataset)
-    print(f"Dataset: {args.dataset} | image_shape={tuple(image_shape)} | num_classes={num_classes}")
+    # load dataset (official train -> train/val; official test unchanged)
+    train_dataset, val_dataset, test_dataset, image_shape, num_classes, n_train, n_val = get_datasets(args.dataset, val_ratio=args.val_ratio, seed=args.seed)
+    n_test = len(test_dataset)
+    print(
+        f"Dataset: {args.dataset} | image_shape={tuple(image_shape)} | "
+        f"num_classes={num_classes} | "
+        f"split train/val/test = {n_train}/{n_val}/{n_test} "
+        f"(val_ratio={args.val_ratio})"
+    )
 
     # define data loader
     generator = torch.Generator()
     generator.manual_seed(args.seed)
-    train_loader = DataLoader(train_dataset, batch_size = BATCH_SIZE, shuffle = True, generator = generator)
-    test_loader = DataLoader(test_dataset, batch_size = BATCH_SIZE, shuffle = False)
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, generator=generator)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
     # define device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -156,28 +174,50 @@ if __name__ == "__main__":
     # build loss function and optimizer
     loss_function = build_loss_function(args.loss_function)
     epochs = args.epochs
+    split_sizes = (n_train, n_val, n_test)
+
     # train the model
     if args.mode == "train":
         model = build_model(args.model, args.dims, image_shape, num_classes)
         optimizer = build_optimizer(args.optimizer, model, args.lr)
         model, history = train_model(
-            model, train_loader, loss_function, optimizer, device, epochs
+            model,
+            train_loader,
+            loss_function,
+            optimizer,
+            device,
+            epochs,
+            val_loader=val_loader,
         )
         save_model(model, args.model_name, args.model, image_shape, num_classes)
-        save_run_logs(args.model_name, args, history)
+        save_run_logs(args.model_name, args, history, split_sizes=split_sizes)
     # test the model
     elif args.mode == "test":
         model = load_model(args.model_name)
-        test_model(model, test_loader, loss_function, device)
+        test_model(model, test_loader, loss_function, device, split_name="Test")
     # train and test the model
     elif args.mode == "train_test":
         model = build_model(args.model, args.dims, image_shape, num_classes)
         optimizer = build_optimizer(args.optimizer, model, args.lr)
         model, history = train_model(
-            model, train_loader, loss_function, optimizer, device, epochs
+            model,
+            train_loader,
+            loss_function,
+            optimizer,
+            device,
+            epochs,
+            val_loader=val_loader,
         )
         save_model(model, args.model_name, args.model, image_shape, num_classes)
-        test_metrics = test_model(model, test_loader, loss_function, device)
-        save_run_logs(args.model_name, args, history, test_metrics)
+        test_metrics = test_model(
+            model, test_loader, loss_function, device, split_name="Test"
+        )
+        save_run_logs(
+            args.model_name,
+            args,
+            history,
+            test_metrics,
+            split_sizes=split_sizes,
+        )
     else:
         raise ValueError(f"Invalid mode: {args.mode}")

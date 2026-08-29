@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |------|------|
-| 文档版本 | v2.2 |
+| 文档版本 | v2.3 |
 | 代码仓库 | 本项目根目录 |
 | 运行入口 | `main.py` |
 | 实验性质 | 对照实验；用于完成可复现的计算机视觉入门项目 |
@@ -47,6 +47,20 @@
 
 三个数据集按视觉任务复杂度递增排列，排序依据为通道数、背景复杂度与类内差异等数据固有属性。
 
+### 2.2.1 训练 / 验证 / 测试划分
+
+官方训练集按比例再划分为 **训练子集** 与 **验证集**；官方测试集保持不变，仅用于阶段 B（及可选 C/D）的最终评估。
+
+| 项目 | 规定 |
+|------|------|
+| 验证集比例 | 默认 `val_ratio=0.1`（命令行 `-vr`） |
+| 划分方式 | 对官方 `train=True` 子集做 `random_split` |
+| 划分种子 | 与运行种子 `-s` 相同，保证可复现 |
+| 选参依据（阶段 A） | 验证集 `val_acc` / `val_loss`（`history.csv`） |
+| 最终评价（阶段 B） | 官方测试集 `final_test_acc` |
+
+每个训练 epoch 结束后额外在验证集上评估一次，写入 `history.csv` 的 `val_loss`、`val_acc`，供选参与绘图。
+
 **预实验仅使用 MNIST**；Fashion-MNIST 与 CIFAR-10 仅出现在正式主对比及可选扩展中。
 
 ### 2.3 模型
@@ -62,9 +76,9 @@
 
 | 项目 | 记录 |
 |------|------|
-| 设备 | CPU / GPU（型号：________） |
-| CUDA | 是 / 否 |
-| 关键单次训练耗时量级 | ________ |
+| 设备 | GPU：NVIDIA GeForce RTX 4060 Laptop GPU（CUDA 12.1，PyTorch 2.5.1+cu121；环境 `image-cls`） |
+| CUDA | 是 |
+| 单次训练耗时量级 | MNIST、10 epoch：约 0.8～1.2 分钟/次（A1 六组合计约 7 分钟） |
 
 ### 2.5 命令行参数一览
 
@@ -77,7 +91,8 @@
 | `--optimizer` | `-opt` | `adam` / `sgd` |
 | `--lr` | `-lr` | 学习率 |
 | `--epochs` | `-e` | 训练轮次 |
-| `--seed` | `-s` | 随机种子 |
+| `--seed` | `-s` | 随机种子（同时用于 train/val 划分） |
+| `--val_ratio` | `-vr` | 从官方训练集划出验证集的比例，默认 `0.1` |
 | `--model_name` | `-mn` | 本次运行名称（决定 checkpoint 与日志路径） |
 
 正式对比（阶段 B 及可选 C/D）使用 `-mode train_test`。  
@@ -101,7 +116,7 @@
 1. 阶段 A 按 **A1→A2→A3** 完成后，将配置写入第 6.1、6.2 节，并作为阶段 B 的唯一配置来源；
 2. 阶段 B 执行过程中不得修改第 6 节已填写内容；
 3. 阶段 C、D 的结果不得回写为第 6 节主配置；
-4. 预实验仅使用 MNIST；仅依据训练稳定性与训练准确率选参；**不跑测试集、不以测试指标选参**；**不以两模型谁更高为选参标准**；主对比测试指标仅在第 6 节冻结之后用于汇总。
+4. 预实验仅使用 MNIST；仅依据训练稳定性与**验证集**指标选参；**不跑测试集、不以测试指标选参**；**不以两模型谁更高为选参标准**；主对比测试指标仅在第 6 节冻结之后用于汇总。全流程默认启用验证集（`-vr 0.1`）。
 
 阶段 A 与阶段 B 的区别：A 用于确定「训什么结构、用什么超参」（只训练）；B 才进行 MLP 与 CNN 的对照评价（训练并在测试集上评估）。
 
@@ -142,6 +157,8 @@ A3 用 CNN 按 6.1 / 6.2 验证一次    →  通过后正式冻结
 - A2 **只训练 MLP**，得到两模型在主实验中共用的训练协议；
 - A3 **不重新选参**，只确认该协议在 CNN 上可正常训练。
 
+全流程默认 `-vr 0.1`；命令中可显式写出。因数据划分变更，此前不含验证集的运行结果须全部重跑。
+
 ### 5.3 条件
 
 | 项目 | 规定 |
@@ -150,8 +167,9 @@ A3 用 CNN 按 6.1 / 6.2 验证一次    →  通过后正式冻结
 | 随机种子 | 允许单一种子，推荐 `42` |
 | 模式 | `-mode train`（只训练，不评估测试集；不生成以测试结果为依据的选参） |
 | 批大小 / 损失 | 128 / CrossEntropy |
-| 训练准确率阈值（默认） | 最终 `train_acc` ≥ 0.90（来自 `history.csv`）；若调整须记录 |
-| 产物 | `history.csv`、`config.json`；预实验**不要求**、也不使用 `metrics.json` 中的测试指标 |
+| 验证集 | 默认 `-vr 0.1`，与主实验相同 |
+| 选参阈值（默认） | 最终 **`val_acc` ≥ 0.90**（来自 `history.csv`）；若调整须记录 |
+| 产物 | `history.csv`（含 train/val）、`config.json`；预实验**不使用**测试集指标 |
 
 ### 5.4 候选集合（开始前固定）
 
@@ -203,7 +221,7 @@ pre_A1_{model}_d{dims_tag}_s{seed}
 ```bash
 python main.py -mode train \
   -m <mlp|cnn> -ds mnist -d <dims> \
-  -opt adam -lr 0.001 -e 10 -s 42 \
+  -opt adam -lr 0.001 -e 10 -s 42 -vr 0.1 \
   -mn pre_A1_<model>_d<dims_tag>_s42
 ```
 
@@ -212,7 +230,7 @@ python main.py -mode train \
 对同一模型的各结构候选独立判断：
 
 1. 剔除持续发散、异常中断或损失无明显下降的配置；
-2. 最终 `train_acc`（`history.csv` 最后一行）不低于第 5.3 节阈值；
+2. 最终 `val_acc`（`history.csv` 最后一行）不低于第 5.3 节阈值；
 3. 在达标候选中选中等宽度（MLP 优先 `256 128`，CNN 优先 `32 64`；该档未达标则选达标者中宽度居中者）；
 4. 不得使用测试集指标；不得以相对另一模型的表现为入选理由；
 5. 未入选宽度可留至阶段 D。
@@ -242,7 +260,7 @@ pre_A2_{T标签}_mlp_d{dims_tag}_s{seed}
 ```bash
 python main.py -mode train \
   -m mlp -ds mnist -d <第6.1节MLP的d> \
-  -opt <T组opt> -lr <T组lr> -e <T组epochs> -s 42 \
+  -opt <T组opt> -lr <T组lr> -e <T组epochs> -s 42 -vr 0.1 \
   -mn pre_A2_<T标签>_mlp_d<MLP的dims_tag>_s42
 ```
 
@@ -251,7 +269,7 @@ python main.py -mode train \
 仅根据 MLP 的训练日志判断：
 
 1. 剔除发散、中断或损失无明显下降的 T 组；
-2. MLP 最终 `train_acc` 不低于第 5.3 节阈值；
+2. MLP 最终 `val_acc` 不低于第 5.3 节阈值；
 3. 多组达标时选更简配置：优先更少轮次，其次优先 `adam` + `0.001`；
 4. 不得引入 CNN 结果，不得使用测试集指标参与选择。
 
@@ -280,13 +298,13 @@ pre_A3_cnn_d{dims_tag}_s{seed}
 ```bash
 python main.py -mode train \
   -m cnn -ds mnist -d <第6.1节CNN的d> \
-  -opt <第6.2节opt> -lr <第6.2节lr> -e <第6.2节MNIST轮次> -s 42 \
+  -opt <第6.2节opt> -lr <第6.2节lr> -e <第6.2节MNIST轮次> -s 42 -vr 0.1 \
   -mn pre_A3_cnn_d<CNN的dims_tag>_s42
 ```
 
 ### 5.10 步骤 A3 通过准则与失败处理
 
-**通过：** 训练稳定（损失总体下降、无持续发散），且最终 `train_acc` 不低于第 5.3 节阈值。
+**通过：** 训练稳定（损失总体下降、无持续发散），且最终 `val_acc` 不低于第 5.3 节阈值。
 
 **未通过时（仍不做模型对比、仍不依据测试集）：**
 
@@ -296,7 +314,7 @@ python main.py -mode train \
 
 ### 5.11 预实验记录
 
-保留全部 `logs/<name>/`（至少含 `history.csv`、`config.json`）。另存选参说明（如 `docs/pre_experiment_notes.md`），至少包括：
+保留全部 `logs/<name>/`（至少含 train/val 字段的 `history.csv`、`config.json`）。另存选参说明（如 `docs/pre_experiment_notes.md`），至少包括：
 
 1. A1 各模型结构候选与入选结果（第 6.1 节）；
 2. A2 仅 MLP 的 T 组列表与入选超参（第 6.2 节）；
@@ -327,6 +345,7 @@ python main.py -mode train \
 | 批大小 | `128` | 代码固定 |
 | 损失函数 | `cross_entropy` | 实验固定 |
 | 正式实验随机种子 | `0`，`1`，`42` | 实验固定 |
+| 验证集比例 `-vr` | `0.1` | 实验固定 |
 
 | 元信息 | 内容 |
 |--------|------|
@@ -518,10 +537,12 @@ logs/<model_name>/
 ```text
 checkpoints/<model_name>.pth
 logs/<model_name>/
-  history.csv       # 选参依据
-  config.json
-  # 无 metrics.json（或不使用其中的测试字段）
+  history.csv       # epoch, train_*, val_*；选参看 val_*
+  config.json       # 含 val_ratio, n_train, n_val, n_test
+  # 无 metrics.json（或不使用测试字段）
 ```
+
+`history.csv` 字段（训练阶段通用）：`epoch, train_loss, train_acc, val_loss, val_acc`。
 
 复现时核对：代码版本、第 6 节冻结配置、命名与 `config.json` 一致；主对比另核 `metrics.json`。
 
@@ -554,10 +575,10 @@ logs/<model_name>/
 
 - [ ] 可运行 `python main.py -h`
 - [ ] 第 6.1、6.2 完整；顺序为 A1→A2→A3；预实验数据集为 `mnist`；预实验命令为 `-mode train`
-- [ ] A2 日志仅为 MLP；存在 A3 的 CNN 验证日志；预实验日志以 `history.csv` 的 `train_acc` 为准、无测试选参
+- [ ] A2 日志仅为 MLP；存在 A3 的 CNN 验证日志；预实验以 `history.csv` 的 `val_acc` 为准、无测试选参；日志含 val 曲线字段
 - [ ] 阶段 B 命令为 `-mode train_test`，与第 6 节一致，`-mn` 含正确 `dims_tag`
 - [ ] 主表 mean±std 可由三个种子的 `metrics.json` 复算
 
 ---
 
-**说明：** 预实验流程为 A1（结构）→ A2（仅 MLP 选超参）→ A3（CNN 验证）；数据集为 MNIST；模式为 `-mode train`（不跑测试集）。正式模型对比仅在阶段 B 及可选的 C/D 中以 `-mode train_test` 进行。
+**说明：** 预实验流程为 A1（结构）→ A2（仅 MLP 选超参）→ A3（CNN 验证）；数据集为 MNIST；模式为 `-mode train`（不跑测试集）；全流程从官方训练集划出验证集（默认 10%），每 epoch 记录 val 曲线。正式模型对比仅在阶段 B 及可选的 C/D 中以 `-mode train_test` 进行。因引入验证集，此前无 val 的预实验日志作废，须按新协议重跑。

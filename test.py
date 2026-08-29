@@ -1,7 +1,7 @@
 import torch
 
 @torch.no_grad()
-def test_model(model, test_loader, criterion, device):
+def test_model(model, data_loader, criterion, device, verbose=True, split_name="Test"):
     # move model to device
     model.to(device)
     # set model to evaluation mode
@@ -11,7 +11,7 @@ def test_model(model, test_loader, criterion, device):
     correct = 0
     total = 0
 
-    for images, labels in test_loader:
+    for images, labels in data_loader:
         # move data to device
         images, labels = images.to(device), labels.to(device)
 
@@ -28,9 +28,10 @@ def test_model(model, test_loader, criterion, device):
     avg_loss = total_loss / total
     accuracy = correct / total
 
-    print(
-        f"Test Loss: {avg_loss:.4f} | "
-        f"Test Accuracy: {accuracy:.4f}"
-    )
+    if verbose:
+        print(
+            f"{split_name} Loss: {avg_loss:.4f} | "
+            f"{split_name} Accuracy: {accuracy:.4f}"
+        )
 
     return avg_loss, accuracy

@@ -1,17 +1,19 @@
 import time
 
+from test import test_model
 
-def train_model(model, train_loader, criterion, optimizer, device, epochs):
+
+def train_model(model, train_loader, criterion, optimizer, device, epochs, val_loader=None):
     # move model to device
     model.to(device)
-    # set model to train mode
-    model.train()
 
     history = []
 
     # train the model
     for epoch in range(epochs):
         start_time = time.time()
+        model.train()
+
         total_loss = 0.0
         correct = 0
         total = 0
@@ -40,17 +42,41 @@ def train_model(model, train_loader, criterion, optimizer, device, epochs):
         avg_loss = total_loss / total
         avg_acc = correct / total
 
-        history.append({
+        record = {
             "epoch": epoch + 1,
             "train_loss": avg_loss,
             "train_acc": avg_acc,
-        })
+        }
 
-        print(
-            f"Epoch {epoch+1}/{epochs} | "
-            f"Loss: {avg_loss:.4f} | "
-            f"Accuracy: {avg_acc:.4f} | "
-            f"Time: {time.time() - start_time:.2f}s"
-        )
+        if val_loader is not None:
+            val_loss, val_acc = test_model(
+                model,
+                val_loader,
+                criterion,
+                device,
+                verbose=False,
+                split_name="Val",
+            )
+            record["val_loss"] = val_loss
+            record["val_acc"] = val_acc
+
+        history.append(record)
+
+        if "val_loss" in record:
+            print(
+                f"Epoch {epoch+1}/{epochs} | "
+                f"Train Loss: {avg_loss:.4f} | "
+                f"Train Acc: {avg_acc:.4f} | "
+                f"Val Loss: {record['val_loss']:.4f} | "
+                f"Val Acc: {record['val_acc']:.4f} | "
+                f"Time: {time.time() - start_time:.2f}s"
+            )
+        else:
+            print(
+                f"Epoch {epoch+1}/{epochs} | "
+                f"Loss: {avg_loss:.4f} | "
+                f"Accuracy: {avg_acc:.4f} | "
+                f"Time: {time.time() - start_time:.2f}s"
+            )
 
     return model, history
