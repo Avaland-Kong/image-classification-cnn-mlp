@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |------|------|
-| 文档版本 | v2.1 |
+| 文档版本 | v2.2 |
 | 代码仓库 | 本项目根目录 |
 | 运行入口 | `main.py` |
 | 实验性质 | 对照实验；用于完成可复现的计算机视觉入门项目 |
@@ -80,7 +80,8 @@
 | `--seed` | `-s` | 随机种子 |
 | `--model_name` | `-mn` | 本次运行名称（决定 checkpoint 与日志路径） |
 
-正式对比一律使用 `-mode train_test`。
+正式对比（阶段 B 及可选 C/D）使用 `-mode train_test`。  
+预实验（阶段 A）一律使用 `-mode train`，**不在测试集上评估**。
 
 ---
 
@@ -100,9 +101,9 @@
 1. 阶段 A 按 **A1→A2→A3** 完成后，将配置写入第 6.1、6.2 节，并作为阶段 B 的唯一配置来源；
 2. 阶段 B 执行过程中不得修改第 6 节已填写内容；
 3. 阶段 C、D 的结果不得回写为第 6 节主配置；
-4. 预实验仅使用 MNIST；选参依据为训练稳定性与训练准确率；**不以两模型谁更高为选参标准**；主对比测试指标仅在第 6 节冻结之后用于汇总。
+4. 预实验仅使用 MNIST；仅依据训练稳定性与训练准确率选参；**不跑测试集、不以测试指标选参**；**不以两模型谁更高为选参标准**；主对比测试指标仅在第 6 节冻结之后用于汇总。
 
-阶段 A 与阶段 B 的区别：A 用于确定「训什么结构、用什么超参」；B 才进行 MLP 与 CNN 的对照评价。
+阶段 A 与阶段 B 的区别：A 用于确定「训什么结构、用什么超参」（只训练）；B 才进行 MLP 与 CNN 的对照评价（训练并在测试集上评估）。
 
 ---
 
@@ -147,9 +148,10 @@ A3 用 CNN 按 6.1 / 6.2 验证一次    →  通过后正式冻结
 |------|------|
 | 数据集 | 仅使用 `mnist` |
 | 随机种子 | 允许单一种子，推荐 `42` |
-| 模式 | `-mode train_test` |
+| 模式 | `-mode train`（只训练，不评估测试集；不生成以测试结果为依据的选参） |
 | 批大小 / 损失 | 128 / CrossEntropy |
-| 训练准确率阈值（默认） | 最终 `train_acc` ≥ 0.90；若调整须记录 |
+| 训练准确率阈值（默认） | 最终 `train_acc` ≥ 0.90（来自 `history.csv`）；若调整须记录 |
+| 产物 | `history.csv`、`config.json`；预实验**不要求**、也不使用 `metrics.json` 中的测试指标 |
 
 ### 5.4 候选集合（开始前固定）
 
@@ -199,7 +201,7 @@ pre_A1_{model}_d{dims_tag}_s{seed}
 **命令模板：**
 
 ```bash
-python main.py -mode train_test \
+python main.py -mode train \
   -m <mlp|cnn> -ds mnist -d <dims> \
   -opt adam -lr 0.001 -e 10 -s 42 \
   -mn pre_A1_<model>_d<dims_tag>_s42
@@ -210,19 +212,19 @@ python main.py -mode train_test \
 对同一模型的各结构候选独立判断：
 
 1. 剔除持续发散、异常中断或损失无明显下降的配置；
-2. 最终 `train_acc` 不低于第 5.3 节阈值；
+2. 最终 `train_acc`（`history.csv` 最后一行）不低于第 5.3 节阈值；
 3. 在达标候选中选中等宽度（MLP 优先 `256 128`，CNN 优先 `32 64`；该档未达标则选达标者中宽度居中者）；
-4. 不得以相对另一模型的测试表现为入选理由；
+4. 不得使用测试集指标；不得以相对另一模型的表现为入选理由；
 5. 未入选宽度可留至阶段 D。
 
 ### 5.7 步骤 A2：选定训练超参数（仅 MLP）
 
-**性质：** 只在 MLP 上比较 T1–T3；本步不训练 CNN，不做模型对比。
+**性质：** 只在 MLP 上比较 T1–T3；本步不训练 CNN，不做模型对比；不跑测试集。
 
 **操作：**
 
 1. `-m mlp`，`-d` 固定为第 6.1 节 MLP 结构；
-2. 对 T1、T2、T3 各训练一次；
+2. 对 T1、T2、T3 各训练一次（`-mode train`）；
 3. 按第 5.8 节准则选出一组超参数；
 4. 设定主实验中 Fashion-MNIST 轮次（可与 MNIST 入选轮次相同）及 CIFAR-10 轮次（建议为 MNIST 入选轮次的 1.5～2 倍）；
 5. **填写冻结表第 6.2 节**（A3 通过后正式冻结）。
@@ -238,7 +240,7 @@ pre_A2_{T标签}_mlp_d{dims_tag}_s{seed}
 **命令模板：**
 
 ```bash
-python main.py -mode train_test \
+python main.py -mode train \
   -m mlp -ds mnist -d <第6.1节MLP的d> \
   -opt <T组opt> -lr <T组lr> -e <T组epochs> -s 42 \
   -mn pre_A2_<T标签>_mlp_d<MLP的dims_tag>_s42
@@ -246,16 +248,16 @@ python main.py -mode train_test \
 
 ### 5.8 步骤 A2 选定准则
 
-仅根据 MLP 结果判断：
+仅根据 MLP 的训练日志判断：
 
 1. 剔除发散、中断或损失无明显下降的 T 组；
 2. MLP 最终 `train_acc` 不低于第 5.3 节阈值；
 3. 多组达标时选更简配置：优先更少轮次，其次优先 `adam` + `0.001`；
-4. 不得引入 CNN 结果参与选择。
+4. 不得引入 CNN 结果，不得使用测试集指标参与选择。
 
 ### 5.9 步骤 A3：CNN 接通验证
 
-**性质：** 超参已由 MLP 选定后，用 CNN 按第 6.1 / 6.2 节各跑 **一次**，确认协议可迁移。不重新选参，不与 MLP 比分。
+**性质：** 超参已由 MLP 选定后，用 CNN 按第 6.1 / 6.2 节各跑 **一次**（仍为 `-mode train`），确认协议可迁移。不重新选参，不与 MLP 比分，不跑测试集。
 
 **操作：**
 
@@ -276,7 +278,7 @@ pre_A3_cnn_d{dims_tag}_s{seed}
 **命令模板：**
 
 ```bash
-python main.py -mode train_test \
+python main.py -mode train \
   -m cnn -ds mnist -d <第6.1节CNN的d> \
   -opt <第6.2节opt> -lr <第6.2节lr> -e <第6.2节MNIST轮次> -s 42 \
   -mn pre_A3_cnn_d<CNN的dims_tag>_s42
@@ -286,20 +288,20 @@ python main.py -mode train_test \
 
 **通过：** 训练稳定（损失总体下降、无持续发散），且最终 `train_acc` 不低于第 5.3 节阈值。
 
-**未通过时（仍不做模型对比）：**
+**未通过时（仍不做模型对比、仍不依据测试集）：**
 
 1. 在 A2 已达标的 T 组中，按第 5.8 节「更简优先」取下一组，更新第 6.2 节后重跑 A3 一次；
 2. 若仍未通过，可将 MNIST / Fashion 轮次按预先声明幅度上调（例如 +5），更新第 6.2 节后再验证一次；
-3. 过程写入选参说明；不得根据「CNN 测试是否超过 MLP」调整配置。
+3. 过程写入选参说明；不得根据测试集表现或「相对 MLP 高低」调整配置。
 
 ### 5.11 预实验记录
 
-保留全部 `logs/<name>/`。另存选参说明（如 `docs/pre_experiment_notes.md`），至少包括：
+保留全部 `logs/<name>/`（至少含 `history.csv`、`config.json`）。另存选参说明（如 `docs/pre_experiment_notes.md`），至少包括：
 
 1. A1 各模型结构候选与入选结果（第 6.1 节）；
 2. A2 仅 MLP 的 T 组列表与入选超参（第 6.2 节）；
 3. A3 CNN 验证是否通过及失败处理（若有）；
-4. 声明：预实验未进行两模型性能对比；超参由 MLP 选定后两模型共用。
+4. 声明：预实验未评估测试集、未进行两模型性能对比；超参由 MLP 选定后两模型共用。
 
 ---
 
@@ -501,15 +503,27 @@ s=\sqrt{\frac{1}{2}\sum_{i=1}^{3}(x_i-\bar{x})^2}
 
 ## 11. 数据与产物路径
 
+**阶段 B / C / D（`train_test`）：**
+
 ```text
 checkpoints/<model_name>.pth
 logs/<model_name>/
   history.csv
   config.json
-  metrics.json
+  metrics.json      # 最终测试指标
 ```
 
-复现时核对：代码版本、第 6 节冻结配置、命名与 `config.json` 一致、`metrics.json` 指标。
+**阶段 A 预实验（`train`）：**
+
+```text
+checkpoints/<model_name>.pth
+logs/<model_name>/
+  history.csv       # 选参依据
+  config.json
+  # 无 metrics.json（或不使用其中的测试字段）
+```
+
+复现时核对：代码版本、第 6 节冻结配置、命名与 `config.json` 一致；主对比另核 `metrics.json`。
 
 ---
 
@@ -539,11 +553,11 @@ logs/<model_name>/
 ## 14. 复现检查表
 
 - [ ] 可运行 `python main.py -h`
-- [ ] 第 6.1、6.2 完整；顺序为 A1→A2→A3；预实验数据集为 `mnist`
-- [ ] A2 日志仅为 MLP；存在 A3 的 CNN 验证日志
-- [ ] 阶段 B 命令与第 6 节一致，`-mn` 含正确 `dims_tag`
+- [ ] 第 6.1、6.2 完整；顺序为 A1→A2→A3；预实验数据集为 `mnist`；预实验命令为 `-mode train`
+- [ ] A2 日志仅为 MLP；存在 A3 的 CNN 验证日志；预实验日志以 `history.csv` 的 `train_acc` 为准、无测试选参
+- [ ] 阶段 B 命令为 `-mode train_test`，与第 6 节一致，`-mn` 含正确 `dims_tag`
 - [ ] 主表 mean±std 可由三个种子的 `metrics.json` 复算
 
 ---
 
-**说明：** 预实验流程为 A1（结构）→ A2（仅 MLP 选超参）→ A3（CNN 验证）；数据集为 MNIST。正式模型对比仅在阶段 B 及可选的 C/D 中进行。
+**说明：** 预实验流程为 A1（结构）→ A2（仅 MLP 选超参）→ A3（CNN 验证）；数据集为 MNIST；模式为 `-mode train`（不跑测试集）。正式模型对比仅在阶段 B 及可选的 C/D 中以 `-mode train_test` 进行。
