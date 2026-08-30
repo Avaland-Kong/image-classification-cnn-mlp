@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from torchvision import datasets, transforms
 from torch.utils.data import random_split
 import torch
@@ -27,10 +29,11 @@ _DATASET_STATS = {
 }
 
 
-def get_datasets(name, root="./data", val_ratio=DEFAULT_VAL_RATIO, seed=42):
+def get_datasets(name, root=None, val_ratio=DEFAULT_VAL_RATIO, seed=42):
     """Load dataset and split official train into train/val.
 
     Test set is the official test split and is never used for validation.
+    Data is stored under ``data/<dataset_name>/``.
     """
     if name not in _DATASET_STATS:
         raise ValueError(
@@ -38,6 +41,10 @@ def get_datasets(name, root="./data", val_ratio=DEFAULT_VAL_RATIO, seed=42):
         )
     if not 0.0 < val_ratio < 1.0:
         raise ValueError(f"val_ratio must be in (0, 1), got {val_ratio}")
+
+    if root is None:
+        root = str(Path("data") / name)
+    Path(root).mkdir(parents=True, exist_ok=True)
 
     cfg = _DATASET_STATS[name]
     transform = transforms.Compose([

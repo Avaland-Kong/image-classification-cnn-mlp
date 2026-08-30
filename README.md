@@ -22,7 +22,7 @@ MNIST/
 │   ├── mlp.py           # MLP 定义
 │   └── cnn.py           # CNN 定义
 ├── checkpoints/         # 模型权重（训练后生成，已被 .gitignore 忽略）
-├── data/                # MNIST 数据（首次运行自动下载，已被 .gitignore 忽略）
+├── data/                # 各数据集目录 data/<name>/（首次运行自动下载，已被 .gitignore 忽略）
 ├── .gitignore
 └── README.md
 ```
