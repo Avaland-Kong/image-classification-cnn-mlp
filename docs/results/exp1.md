@@ -89,7 +89,8 @@ CIFAR-10 使用 `-e 20`，其余 `-e 10`。
 | Fashion-MNIST | 0.3455 ± 0.0078 | 0.2603 ± 0.0100 |
 | CIFAR-10 | 2.1272 ± 0.0063 | 1.2254 ± 0.0933 |
 
-对比图：`docs/results/exp1_test_acc.png`。
+对比图：`docs/results/exp1_test_acc.png`。  
+CIFAR-10 训练 / 验证曲线（种子 17；实线 train，虚线 val）：`docs/results/exp1_cifar10_curves.png`。
 
 已同步写入 `docs/experiment_design.md` 第 7.5 节。
 
